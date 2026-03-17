@@ -12,15 +12,25 @@ class ErrorDetail(BaseModel):
     )
 
 
+# Guardrails: max lengths to control cost and abuse (plan section 1)
+MAX_SENTENCE_LENGTH = 1000
+MAX_LANGUAGE_LENGTH = 50
+
+
 class FeedbackRequest(BaseModel):
     sentence: str = Field(
-        min_length=1, description="The learner's sentence in the target language"
+        min_length=1,
+        max_length=MAX_SENTENCE_LENGTH,
+        description="The learner's sentence in the target language",
     )
     target_language: str = Field(
-        min_length=2, description="The language the learner is studying"
+        min_length=2,
+        max_length=MAX_LANGUAGE_LENGTH,
+        description="The language the learner is studying",
     )
     native_language: str = Field(
         min_length=2,
+        max_length=MAX_LANGUAGE_LENGTH,
         description="The learner's native language -- explanations will be in this language",
     )
 

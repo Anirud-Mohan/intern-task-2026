@@ -108,5 +108,68 @@
       ],
       "difficulty": "B1"
     }
+  },
+  {
+    "description": "Korean sentence with particle error",
+    "request": {
+      "sentence": "저는 학교를 가요.",
+      "target_language": "Korean",
+      "native_language": "English"
+    },
+    "expected_response": {
+      "corrected_sentence": "저는 학교에 가요.",
+      "is_correct": false,
+      "errors": [
+        {
+          "original": "를",
+          "correction": "에",
+          "error_type": "grammar",
+          "explanation": "For the verb 'to go', the location should use the particle '에', not the object particle '를'."
+        }
+      ],
+      "difficulty": "A2"
+    }
+  },
+  {
+    "description": "Russian sentence with case error",
+    "request": {
+      "sentence": "Я иду в школа.",
+      "target_language": "Russian",
+      "native_language": "English"
+    },
+    "expected_response": {
+      "corrected_sentence": "Я иду в школу.",
+      "is_correct": false,
+      "errors": [
+        {
+          "original": "школа",
+          "correction": "школу",
+          "error_type": "grammar",
+          "explanation": "After 'в' with motion, 'школа' should be in the accusative case 'школу'."
+        }
+      ],
+      "difficulty": "A2"
+    }
+  },
+  {
+    "description": "Chinese sentence with missing measure word",
+    "request": {
+      "sentence": "我有书。",
+      "target_language": "Chinese",
+      "native_language": "English"
+    },
+    "expected_response": {
+      "corrected_sentence": "我有一本书。",
+      "is_correct": false,
+      "errors": [
+        {
+          "original": "书",
+          "correction": "一本书",
+          "error_type": "missing_word",
+          "explanation": "You usually need a measure word here, for example '一本书' (one book)."
+        }
+      ],
+      "difficulty": "A1"
+    }
   }
 ]
