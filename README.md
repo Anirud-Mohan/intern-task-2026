@@ -187,11 +187,3 @@ Both scripts assume `OPENAI_API_KEY` is set.
   - Guardrails are layered (structural + NeMo), so swapping the main model or adding more safety checks is localized.
   - Evaluation is decoupled via the LLM-as-judge script.
 
----
-
-## Commit message suggestions
-
-You can summarize this round of work with a single, concise commit message such as:
-
-- **Option 1:** `feat: add guarded feedback API with NeMo, caching, and eval tooling`
-- **Option 2:** `feat: productionize feedback API (guardrails, retries, caching, tests, README)`
