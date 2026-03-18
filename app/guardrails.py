@@ -39,7 +39,6 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
         message = await _llm_rails.generate_async(
             messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
         )
-        # message may be a dict or string depending on version; normalize to string content
         if isinstance(message, dict):
             content = str(message.get("content", "")).strip()
         else:
@@ -53,7 +52,7 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
 
         logger.warning("NeMo guardrails returned unexpected output: %r", content)
         return True
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc: 
         logger.warning("NeMo guardrails failed, allowing request by default: %s", exc)
         return True
 

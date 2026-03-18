@@ -35,13 +35,12 @@ async def judge_example(client: AsyncOpenAI, example: dict, actual: dict) -> dic
         "actual_response": actual,
     }
     resp = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=os.environ.get('JUDGE_MODEL'),
         messages=[
             {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
-        temperature=0,
     )
     return json.loads(resp.choices[0].message.content)
 

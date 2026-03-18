@@ -12,7 +12,7 @@ class ErrorDetail(BaseModel):
     )
 
 
-# Guardrails: max lengths to control cost and abuse (plan section 1)
+# max lengths to control cost and abuse
 MAX_SENTENCE_LENGTH = 1000
 MAX_LANGUAGE_LENGTH = 50
 

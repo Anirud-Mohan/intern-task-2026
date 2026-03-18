@@ -12,7 +12,10 @@ from openai import APIError, AsyncOpenAI
 
 from app.models import FeedbackRequest, FeedbackResponse
 
+from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 # Load response schema once at module load
 _SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
@@ -88,7 +91,7 @@ def _cache_key(request: FeedbackRequest) -> tuple[str, str, str]:
     )
 
 
-# In-memory cache: key -> FeedbackResponse. Production would use Redis or similar.
+# In-memory cache: key -> FeedbackResponse
 _feedback_cache: dict[tuple[str, str, str], FeedbackResponse] = {}
 _cache_lock = asyncio.Lock()
 
@@ -111,10 +114,11 @@ _BACKOFF_BASE_SEC = 1.0
 async def _call_llm(client: AsyncOpenAI, user_message: str) -> tuple[dict, int, int]:
     """Call OpenAI with retry on transient errors. Returns (parsed_data, prompt_tokens, completion_tokens)."""
     last_error: Exception | None = None
+    model_name =  os.environ.get('DEFAULT_FEEDBACK_MODEL')
     for attempt in range(_MAX_RETRIES + 1):
         try:
             response = await client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=model_name,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_message},

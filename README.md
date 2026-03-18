@@ -187,3 +187,9 @@ Both scripts assume `OPENAI_API_KEY` is set.
   - Guardrails are layered (structural + NeMo), so swapping the main model or adding more safety checks is localized.
   - Evaluation is decoupled via the LLM-as-judge script.
 
+## Architecture
+
+The following diagram shows the high-level components of the system and how requests are processed.
+
+![Architecture diagram](Architecture.svg)
+
