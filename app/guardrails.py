@@ -51,7 +51,9 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
             return True
 
         logger.warning("NeMo guardrails returned unexpected output: %r", content)
-        return True
+        # If NeMo didn't clearly emit ALLOW/REJECT, treat it as non-compliant
+        # instead of allowing the request to pass.
+        return False
     except Exception as exc:
         logger.warning("NeMo guardrails failed, allowing request by default: %s", exc)
         return True

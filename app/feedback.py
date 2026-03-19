@@ -128,7 +128,7 @@ async def _call_llm(
 ) -> tuple[dict, int, int]:
     """Call OpenAI with retry on transient errors. Returns (parsed_data, prompt_tokens, completion_tokens)."""
     last_error: Exception | None = None
-    model_name = os.environ.get("DEFAULT_FEEDBACK_MODEL", "gpt-4o-mini")
+    model_name = os.environ.get("DEFAULT_FEEDBACK_MODEL")
     for attempt in range(max_retries + 1):
         try:
             remaining = _remaining_time(deadline)
