@@ -72,10 +72,7 @@ The implementation focuses on **robustness (guardrails, schema validation, retri
   - After each LLM call, logs:
     - `token_usage request_id=feedback prompt_tokens=... completion_tokens=...`
   - Cache hits log `prompt_tokens=0 completion_tokens=0 cache_hit=true`.
-- **Benchmark script** in `scripts/benchmark_tokens.py`:
-  - Runs a fixed set of requests `N` times (`BENCHMARK_N`) and reports:
-    - Average latency, min, max.
-  - Token usage is visible in the server logs, not in the API response body.
+- Token usage is visible in the server logs, not in the API response body.
 
 ### LLM-as-a-judge evaluation
 
@@ -166,7 +163,7 @@ pytest tests/test_feedback_integration.py -v
 python -m scripts.eval_with_judge
 ```
 
-Both scripts assume `OPENAI_API_KEY` is set.
+This script assumes `OPENAI_API_KEY` is set.
 
 ---
 

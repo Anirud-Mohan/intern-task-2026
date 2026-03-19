@@ -6,6 +6,8 @@ or should be rejected as off-topic / prompt injection.
 
 import json
 import logging
+import os
+import asyncio
 from pathlib import Path
 
 from nemoguardrails import LLMRails, RailsConfig
@@ -19,6 +21,8 @@ _CONFIG_DIR = Path(__file__).resolve().parent.parent / "guardrails"
 
 _config = RailsConfig.from_path(str(_CONFIG_DIR))
 _llm_rails = LLMRails(_config)
+
+_GUARDRAILS_TIMEOUT_SEC = float(os.getenv("GUARDRAILS_TIMEOUT_SEC", "3.0"))
 
 
 async def check_input_allowed(sentence: str, target_language: str, native_language: str) -> bool:
@@ -36,8 +40,11 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
         "native_language": native_language,
     }
     try:
-        message = await _llm_rails.generate_async(
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
+        message = await asyncio.wait_for(
+            _llm_rails.generate_async(
+                messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]
+            ),
+            timeout=_GUARDRAILS_TIMEOUT_SEC,
         )
         if isinstance(message, dict):
             content = str(message.get("content", "")).strip()
@@ -51,9 +58,15 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
             return True
 
         logger.warning("NeMo guardrails returned unexpected output: %r", content)
-        # If NeMo didn't clearly emit ALLOW/REJECT, treat it as non-compliant
-        # instead of allowing the request to pass.
-        return False
+        # If NeMo didn't clearly emit ALLOW/REJECT, allow the request (fail-open)
+        # to avoid blocking valid requests due to noncompliant classifier output.
+        return True
+    except asyncio.TimeoutError:
+        logger.warning(
+            "NeMo guardrails timed out after %.2fs, allowing request by default",
+            _GUARDRAILS_TIMEOUT_SEC,
+        )
+        return True
     except Exception as exc:
         logger.warning("NeMo guardrails failed, allowing request by default: %s", exc)
         return True
