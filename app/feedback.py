@@ -4,18 +4,18 @@ import asyncio
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import jsonschema
+from dotenv import load_dotenv
 from openai import APIError, AsyncOpenAI
-
 
 from app.models import FeedbackRequest, FeedbackResponse
 
-from dotenv import load_dotenv
-logger = logging.getLogger(__name__)
-
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Load response schema once at module load
 _SCHEMA_DIR = Path(__file__).resolve().parent.parent / "schema"
@@ -46,12 +46,15 @@ the error type, and explain the error in the learner's NATIVE language so they \
 can understand.
 3. Error types must be one of: grammar, spelling, word_choice, punctuation, \
 word_order, missing_word, extra_word, conjugation, gender_agreement, \
-number_agreement, tone_register, other.
+number_agreement, tone_register, other. Never invent new categories.
+    - Use grammar for particle/article/case issues.
+    - Use conjugation for tense/verb-form issues.
+    - If none fit, use other.
 4. Difficulty must be exactly one of: A1, A2, B1, B2, C1, C2 (CEFR level based on \
 sentence complexity, NOT on whether it has errors).
 5. The corrected_sentence should be the minimal correction -- preserve the \
 learner's original meaning and style as much as possible.
-6. Explanations should be concise (1–2 sentences), friendly, and educational.
+6. Use a supportive, confidence-building tone. Explain what to improve (1-2 sentences) and briefly reinforce what the learner did well when possible.
 7. Output ONLY valid JSON with no other text. No markdown, no code fences.
 
 Example input:
@@ -105,18 +108,34 @@ def _validate_response_schema(data: dict) -> None:
     jsonschema.validate(instance=data, schema=_RESPONSE_SCHEMA)
 
 
-# Retry config: stay under 30s total (25s timeout, 2 retries with 1s + 2s backoff)
-_LLM_TIMEOUT = 25.0
-_MAX_RETRIES = 2
-_BACKOFF_BASE_SEC = 1.0
+# Timeout/retry config with an end-to-end budget to stay safely under 30s.
+_END_TO_END_TIMEOUT_SEC = 28.0
+_PER_ATTEMPT_TIMEOUT_SEC = 10.0
+_MAX_RETRIES = 1
+_BACKOFF_BASE_SEC = 0.6
+_MIN_REMAINING_FOR_CALL_SEC = 1.5
 
 
-async def _call_llm(client: AsyncOpenAI, user_message: str) -> tuple[dict, int, int]:
+def _remaining_time(deadline: float) -> float:
+    return max(0.0, deadline - time.monotonic())
+
+
+async def _call_llm(
+    client: AsyncOpenAI,
+    user_message: str,
+    deadline: float,
+    max_retries: int = _MAX_RETRIES,
+) -> tuple[dict, int, int]:
     """Call OpenAI with retry on transient errors. Returns (parsed_data, prompt_tokens, completion_tokens)."""
     last_error: Exception | None = None
-    model_name =  os.environ.get('DEFAULT_FEEDBACK_MODEL')
-    for attempt in range(_MAX_RETRIES + 1):
+    model_name = os.environ.get("DEFAULT_FEEDBACK_MODEL", "gpt-4o-mini")
+    for attempt in range(max_retries + 1):
         try:
+            remaining = _remaining_time(deadline)
+            if remaining <= _MIN_REMAINING_FOR_CALL_SEC:
+                raise FeedbackUnavailableError("Timeout budget exhausted before LLM call")
+
+            attempt_timeout = min(_PER_ATTEMPT_TIMEOUT_SEC, max(0.5, remaining - 0.5))
             response = await client.chat.completions.create(
                 model=model_name,
                 messages=[
@@ -125,7 +144,7 @@ async def _call_llm(client: AsyncOpenAI, user_message: str) -> tuple[dict, int, 
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-                timeout=_LLM_TIMEOUT,
+                timeout=attempt_timeout,
             )
             content = response.choices[0].message.content
             data = json.loads(content)
@@ -134,16 +153,27 @@ async def _call_llm(client: AsyncOpenAI, user_message: str) -> tuple[dict, int, 
             return data, prompt_tokens, completion_tokens
         except APIError as e:
             last_error = e
-            if attempt < _MAX_RETRIES:
+            if attempt < max_retries:
                 delay = _BACKOFF_BASE_SEC * (2**attempt)
-                logger.warning("LLM call failed (attempt %s), retrying in %ss: %s", attempt + 1, delay, e)
-                await asyncio.sleep(delay)
+                remaining = _remaining_time(deadline)
+                safe_delay = min(delay, max(0.0, remaining - _MIN_REMAINING_FOR_CALL_SEC))
+                if safe_delay <= 0:
+                    break
+                logger.warning(
+                    "LLM call failed (attempt %s), retrying in %.2fs: %s",
+                    attempt + 1,
+                    safe_delay,
+                    e,
+                )
+                await asyncio.sleep(safe_delay)
             else:
                 break
     raise FeedbackUnavailableError("LLM request failed after retries") from last_error
 
 
 async def get_feedback(request: FeedbackRequest) -> FeedbackResponse:
+    deadline = time.monotonic() + _END_TO_END_TIMEOUT_SEC
+
     key = _cache_key(request)
     if _cache_enabled():
         async with _cache_lock:
@@ -161,7 +191,7 @@ async def get_feedback(request: FeedbackRequest) -> FeedbackResponse:
         f"Sentence: {request.sentence}"
     )
 
-    data, prompt_tokens, completion_tokens = await _call_llm(client, user_message)
+    data, prompt_tokens, completion_tokens = await _call_llm(client, user_message, deadline)
 
     try:
         _validate_response_schema(data)
@@ -170,9 +200,16 @@ async def get_feedback(request: FeedbackRequest) -> FeedbackResponse:
         fix_message = (
             "Your previous response was invalid: it did not match the required JSON schema. "
             "Return ONLY valid JSON with keys: corrected_sentence, is_correct, errors (array of objects with original, correction, error_type, explanation), difficulty (one of A1,A2,B1,B2,C1,C2). "
-            "error_type must be one of: grammar, spelling, word_choice, punctuation, word_order, missing_word, extra_word, conjugation, gender_agreement, number_agreement, tone_register, other."
+            "error_type must be one of: grammar, spelling, word_choice, punctuation, word_order, missing_word, extra_word, conjugation, gender_agreement, number_agreement, tone_register, other. "
+            "Do NOT invent categories like particle/article/case/tense; map particle/article/case to grammar and tense/verb-form to conjugation. "
+            "If unsure, use other."
         )
-        data, prompt_tokens, completion_tokens = await _call_llm(client, fix_message + "\n\nOriginal request:\n" + user_message)
+        data, prompt_tokens, completion_tokens = await _call_llm(
+            client,
+            fix_message + "\n\nOriginal request:\n" + user_message,
+            deadline,
+            max_retries=0,
+        )
         try:
             _validate_response_schema(data)
         except jsonschema.ValidationError as e:

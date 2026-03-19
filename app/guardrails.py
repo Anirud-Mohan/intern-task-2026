@@ -52,7 +52,7 @@ async def check_input_allowed(sentence: str, target_language: str, native_langua
 
         logger.warning("NeMo guardrails returned unexpected output: %r", content)
         return True
-    except Exception as exc: 
+    except Exception as exc:
         logger.warning("NeMo guardrails failed, allowing request by default: %s", exc)
         return True
 
